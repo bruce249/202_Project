@@ -11,6 +11,9 @@ const mlTime = document.getElementById("mlTime");
 let rateChart;
 let tttChart;
 
+Chart.defaults.animation = false;
+Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+
 const chartTheme = {
   ticks: { color: "#d9e8f6" },
   grid: { color: "rgba(126, 163, 198, 0.2)" },
@@ -31,8 +34,14 @@ function unpackXY(series) {
   };
 }
 
+function downsampleSeries(series, maxPoints = 260) {
+  if (!Array.isArray(series) || series.length <= maxPoints) return series;
+  const step = Math.ceil(series.length / maxPoints);
+  return series.filter((_, i) => i % step === 0);
+}
+
 function makeLineDataset(label, series, color, dash = []) {
-  const xy = unpackXY(series);
+  const xy = unpackXY(downsampleSeries(series));
   return {
     label,
     data: xy.x.map((x, i) => ({ x, y: xy.y[i] })),
@@ -57,6 +66,8 @@ function renderRateChart(data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      parsing: false,
+      normalized: true,
       scales: {
         x: {
           ...chartTheme,
@@ -68,6 +79,7 @@ function renderRateChart(data) {
           title: { display: true, text: "Temperature (C)", color: "#92abc2" },
         },
       },
+      elements: { line: { borderWidth: 2 } },
       plugins: { legend: { labels: { color: "#d9e8f6" } } },
     },
   });
@@ -88,6 +100,8 @@ function renderTTTChart(data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      parsing: false,
+      normalized: true,
       scales: {
         x: {
           ...chartTheme,
@@ -99,6 +113,7 @@ function renderTTTChart(data) {
           title: { display: true, text: "Temperature (C)", color: "#92abc2" },
         },
       },
+      elements: { line: { borderWidth: 2 } },
       plugins: { legend: { labels: { color: "#d9e8f6" } } },
     },
   });
