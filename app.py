@@ -187,7 +187,7 @@ def get_models(n_virtual: int, n_avrami: int):
 
 @st.cache_data(show_spinner=False)
 def run_nucleation_sim(mat_name: str, T_celsius: float,
-                       n_frames: int = 65, grid_size: int = 160):
+                       n_frames: int = 50, grid_size: int = 120):
     """
     Pre-compute all animation frames for a 2D nucleation+growth simulation.
     Time axis is normalised: tau = t / t95  (0 → 1 = 95% transformed).
@@ -214,11 +214,11 @@ def run_nucleation_sim(mat_name: str, T_celsius: float,
 
     # Enforce a dense microstructure: minimum 35 nuclei
     exp_n = I_val * thick * L**2 * t95
-    exp_n = float(np.clip(exp_n, 35, 300))
+    exp_n = float(np.clip(exp_n, 30, 120))
 
     rng    = np.random.RandomState(42)
     n_nuc  = int(rng.poisson(exp_n))
-    n_nuc  = max(35, min(n_nuc, 300))
+    n_nuc  = max(30, min(n_nuc, 120))
 
     # Nucleation sites (grid pixel coords) and birth times
     nx_arr = rng.uniform(0, grid_size, n_nuc)
@@ -371,18 +371,33 @@ def build_sim_figure(sim: dict) -> go.Figure:
     fig.frames = frames
 
     # ── slider ─────────────────────────────────────────────────────────────
+    anim_opts = dict(
+        frame=dict(duration=90, redraw=True),
+        transition=dict(duration=0),
+        mode="immediate",
+        fromcurrent=True,
+    )
+    pause_opts = dict(
+        frame=dict(duration=0, redraw=False),
+        transition=dict(duration=0),
+        mode="immediate",
+    )
+
     sliders = [dict(
         active=0,
         currentvalue=dict(prefix="τ = ", suffix="  ×  t₉₅",
                           font=dict(color=AX, size=12)),
-        pad=dict(t=45, b=5),
+        pad=dict(t=50, b=10),
+        len=0.88, x=0.06,
         bgcolor=GRID, bordercolor=EDGE,
         tickcolor=MUTED,
         steps=[dict(
             method="animate",
-            args=[[str(i)], dict(mode="immediate",
-                                 frame=dict(duration=0),
-                                 transition=dict(duration=0))],
+            args=[[str(i)], dict(
+                frame=dict(duration=0, redraw=True),
+                transition=dict(duration=0),
+                mode="immediate",
+            )],
             label=f"{tau_arr[i]:.2f}",
         ) for i in range(n_f)],
     )]
@@ -390,19 +405,19 @@ def build_sim_figure(sim: dict) -> go.Figure:
     fig.update_layout(
         **base_layout(height=600),
         updatemenus=[dict(
-            type="buttons", showactive=False,
-            x=0.0, y=-0.14, xanchor="left",
+            type="buttons", showactive=True,
+            direction="left",
+            x=0.0, y=-0.13, xanchor="left", yanchor="top",
             bgcolor=GRID, bordercolor=EDGE,
-            font=dict(color=AX),
+            font=dict(color=AX, size=13),
+            pad=dict(r=8, t=6),
             buttons=[
                 dict(label="▶  Play",
                      method="animate",
-                     args=[None, dict(frame=dict(duration=70, redraw=True),
-                                      fromcurrent=True, mode="immediate")]),
+                     args=[None, anim_opts]),
                 dict(label="⏸  Pause",
                      method="animate",
-                     args=[[None], dict(frame=dict(duration=0),
-                                        mode="immediate")]),
+                     args=[[None], pause_opts]),
             ],
         )],
         sliders=sliders,
@@ -1172,10 +1187,10 @@ with tab_sim:
 
         sim_res = st.select_slider(
             "Resolution / speed",
-            options=["Fast (120×120)", "Medium (160×160)", "Fine (200×200)"],
-            value="Medium (160×160)",
+            options=["Fast (90×90)", "Medium (120×120)", "Fine (150×150)"],
+            value="Medium (120×120)",
         )
-        gs_map = {"Fast (120×120)": 120, "Medium (160×160)": 160, "Fine (200×200)": 200}
+        gs_map = {"Fast (90×90)": 90, "Medium (120×120)": 120, "Fine (150×150)": 150}
         grid_sz = gs_map[sim_res]
 
         run_btn = st.button("▶  Run Simulation", use_container_width=True,
@@ -1207,7 +1222,7 @@ with tab_sim:
             st.session_state["sim_done"] = True
             with st.spinner("Computing simulation frames…"):
                 sim_data = run_nucleation_sim(
-                    mat_name, float(T_sim_C), n_frames=65, grid_size=grid_sz
+                    mat_name, float(T_sim_C), n_frames=50, grid_size=grid_sz
                 )
             if sim_data is None:
                 st.warning("No transformation at this temperature — try closer to the nose.")
