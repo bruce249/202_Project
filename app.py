@@ -684,8 +684,8 @@ st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────
-tab_analysis, tab_compare, tab_database, tab_method, tab_sim, tab_chat = st.tabs(
-    ["📊  Analysis", "⚖️  Compare", "🗂️  Database", "📐  Methodology", "🎬  Simulation", "🤖  Assistant"]
+tab_analysis, tab_compare, tab_database, tab_method, tab_sim = st.tabs(
+    ["📊  Analysis", "⚖️  Compare", "🗂️  Database", "📐  Methodology", "🎬  Simulation"]
 )
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -1328,85 +1328,6 @@ with tab_sim:
 </div>
 """, unsafe_allow_html=True)
 
-# ═════════════════════════════════════════════════════════════════════════
-# TAB 6 — ASSISTANT (Grok chatbot)
-# ═════════════════════════════════════════════════════════════════════════
-_SYSTEM_PROMPT = """You are an expert assistant for a Phase Transformation Kinetics research dashboard built at IIT Delhi (course MLL202).
-
-PROJECT CONTEXT:
-- Models nucleation & growth of crystals during solid-state phase transformations.
-- Physics engine: Classical Nucleation Theory (CNT) for nucleation rate I(T), Wilson-Frenkel model for growth rate U(T), JMAK (Johnson-Mehl-Avrami-Kolmogorov) for fraction transformed f(t) = 1 - exp(-k·t^n).
-- Dataset: 40 real metals with known thermophysical parameters (Tm, ΔHf, Vm, D0, Qa, a, Nv, σ, ΔGhet_factor). No external API — parameters from literature (Turnbull, Christian, Kurz & Fisher).
-- ML surrogate: GradientBoostingRegressor predicts log I, log U, log k. RandomForestRegressor predicts T_nose and log t_nose. 15-feature input vector per (material, temperature) point.
-- Data augmentation: 40 real metals → 200 virtual materials via ±15% Gaussian perturbation of physical params (Tier 3 physics-guided augmentation).
-- TTT diagrams: Time-Temperature-Transformation curves at 1%, 50%, 99% transformed.
-- Avrami exponent n: controls sigmoidal shape (n=4 → 3D nucleation+growth, n=3 → site-saturated, etc.).
-- 2D grain growth simulation: Voronoi-like per-pixel Poisson nucleation, grains grow as circles, grain boundaries shown in black.
-- Crystal structures in dataset: FCC (Al, Cu, Ni, Ag, Au, Pb, Pt, Rh, Ir, Pd, Ca, Sr, Yb, Th), BCC (Fe, W, Mo, Nb, Ta, V, Cr, Ba, Eu, Li, Na, K, Rb), HCP (Mg, Zn, Cd, Ti, Zr, Hf, Co, Re, Os, Ru, Be, Tl), Diamond (Ge, Si), BCT (In, Sn), Rhombohedral (Bi, Sb), Orthorhombic (Ga), Hexagonal (La, Pr, Nd).
-
-Answer questions about the physics, ML models, code, materials science, or how to use the dashboard. Be concise and technically precise. If asked about specific materials or temperatures, give quantitative reasoning where possible."""
-
-_AI_URL   = "https://api.openai.com/v1/chat/completions"
-_AI_MODEL = "gpt-4o-mini"          # ← change model here  (gpt-4o-mini, gpt-4o, gpt-3.5-turbo)
-_AI_KEY   = "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"
-
-def _call_grok(messages: list) -> str:
-    import requests as _req
-    headers = {"Authorization": f"Bearer {_AI_KEY}", "Content-Type": "application/json"}
-    payload = {"model": _AI_MODEL, "messages": messages, "max_tokens": 1024}
-    try:
-        r = _req.post(_AI_URL, json=payload, headers=headers, timeout=60)
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"⚠️ API error: {e}"
-
-with tab_chat:
-    st.markdown(f"""
-<div style="margin-bottom:18px;">
-  <div style="font-size:20px;font-weight:700;color:{AX};margin-bottom:4px;">
-    🤖 Phase Kinetics Assistant
-  </div>
-  <div style="font-size:13px;color:{MUTED};">
-    Powered by OpenAI · Knows CNT physics, JMAK, ML models, all 40 materials, and this dashboard.
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # Input row at top
-    inp_col, btn_col, clr_col = st.columns([6, 1, 1])
-    with inp_col:
-        user_input = st.text_input(
-            "Message", label_visibility="collapsed",
-            placeholder="Ask about CNT, JMAK, materials, ML model…",
-            key="chat_input_box",
-        )
-    with btn_col:
-        send = st.button("Send", use_container_width=True, type="primary")
-    with clr_col:
-        if st.button("Clear", use_container_width=True):
-            st.session_state.chat_history = []
-            st.rerun()
-
-    # Process message
-    if (send or user_input) and user_input.strip():
-        q = user_input.strip()
-        st.session_state.chat_history.append({"role": "user", "content": q})
-        messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + \
-                   st.session_state.chat_history
-        with st.spinner("Thinking…"):
-            reply = _call_grok(messages)
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
-        st.rerun()
-
-    # Render history
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"],
-                             avatar="🤖" if msg["role"] == "assistant" else "👤"):
-            st.markdown(msg["content"])
 
 # ─────────────────────────────────────────────────────────────────────────
 # FOOTER
