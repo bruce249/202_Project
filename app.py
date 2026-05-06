@@ -1368,7 +1368,7 @@ with tab_chat:
     🤖 Phase Kinetics Assistant
   </div>
   <div style="font-size:13px;color:{MUTED};">
-    Powered by Grok · Knows CNT physics, JMAK, ML models, all 40 materials, and this dashboard.
+    Powered by OpenAI · Knows CNT physics, JMAK, ML models, all 40 materials, and this dashboard.
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1376,35 +1376,37 @@ with tab_chat:
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    col_clr, _ = st.columns([1, 5])
-    with col_clr:
-        if st.button("🗑 Clear chat", use_container_width=True):
+    # Input row at top
+    inp_col, btn_col, clr_col = st.columns([6, 1, 1])
+    with inp_col:
+        user_input = st.text_input(
+            "Message", label_visibility="collapsed",
+            placeholder="Ask about CNT, JMAK, materials, ML model…",
+            key="chat_input_box",
+        )
+    with btn_col:
+        send = st.button("Send", use_container_width=True, type="primary")
+    with clr_col:
+        if st.button("Clear", use_container_width=True):
             st.session_state.chat_history = []
             st.rerun()
 
-    # Render all history
+    # Process message
+    if (send or user_input) and user_input.strip():
+        q = user_input.strip()
+        st.session_state.chat_history.append({"role": "user", "content": q})
+        messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + \
+                   st.session_state.chat_history
+        with st.spinner("Thinking…"):
+            reply = _call_grok(messages)
+        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        st.rerun()
+
+    # Render history
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"],
                              avatar="🤖" if msg["role"] == "assistant" else "👤"):
             st.markdown(msg["content"])
-
-    # Input — always at bottom
-    user_input = st.chat_input("Ask about CNT, JMAK, materials, the ML model, simulation…")
-
-    if user_input:
-        # Show user bubble immediately
-        with st.chat_message("user", avatar="👤"):
-            st.markdown(user_input)
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-
-        # Call API and show reply
-        messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + \
-                   st.session_state.chat_history
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Thinking…"):
-                reply = _call_grok(messages)
-            st.markdown(reply)
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
 
 # ─────────────────────────────────────────────────────────────────────────
 # FOOTER
