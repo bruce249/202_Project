@@ -1,0 +1,117 @@
+:root {
+  --bg: #09101a;
+  --panel: #131f2e;
+  --panel2: #16293d;
+  --line: #29435f;
+  --text: #d9e8f6;
+  --muted: #92abc2;
+  --accent: #ff8a00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 15% 20%, #1d3150 0, transparent 45%),
+    radial-gradient(circle at 85% 5%, #46253f 0, transparent 40%),
+    var(--bg);
+}
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  background: linear-gradient(170deg, var(--panel), var(--panel2));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.controls h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.controls p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+select,
+button {
+  background: #0b1623;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+button {
+  margin-top: 14px;
+  cursor: pointer;
+  font-weight: 600;
+  border-color: #8f5b14;
+  background: linear-gradient(90deg, #bb6a08, var(--accent));
+}
+
+.metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric {
+  background: #0f1c2b;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.2rem;
+}
+
+canvas {
+  width: 100% !important;
+  min-height: 300px;
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

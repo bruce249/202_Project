@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PTK Dashboard - Vercel Frontend</title>
+    <link rel="stylesheet" href="/frontend/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel controls">
+        <h1>Phase Transformation Kinetics</h1>
+        <p>Vercel frontend for your CNT + JMAK + ML model</p>
+        <div class="grid">
+          <label>
+            Material
+            <select id="material"></select>
+          </label>
+          <label>
+            Avrami n
+            <select id="nAvrami">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+            </select>
+          </label>
+          <label>
+            Augmentation
+            <select id="nVirtual">
+              <option value="0">Real only</option>
+              <option value="200" selected>Standard</option>
+              <option value="500">Extended</option>
+              <option value="1000">Publication</option>
+            </select>
+          </label>
+        </div>
+        <button id="runBtn">Run Analysis</button>
+      </section>
+
+      <section class="panel metrics">
+        <div class="metric">
+          <span>Physics Nose T</span>
+          <strong id="physicsT">-</strong>
+        </div>
+        <div class="metric">
+          <span>ML Nose T</span>
+          <strong id="mlT">-</strong>
+        </div>
+        <div class="metric">
+          <span>Physics Nose t</span>
+          <strong id="physicsTime">-</strong>
+        </div>
+        <div class="metric">
+          <span>ML Nose t</span>
+          <strong id="mlTime">-</strong>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Rate Competition</h2>
+        <canvas id="rateChart"></canvas>
+      </section>
+
+      <section class="panel">
+        <h2>TTT Diagram</h2>
+        <canvas id="tttChart"></canvas>
+      </section>
+    </main>
+
+    <script src="/frontend/app.js"></script>
+  </body>
+</html>
