@@ -435,8 +435,7 @@ with tab_analysis:
             xaxis_title="Time (s)",
             yaxis_title="Temperature (°C)",
             height=420,
-            legend=dict(bgcolor=GRID, bordercolor=EDGE, font=dict(color=AX, size=9),
-                        ncols=3),
+            legend=dict(bgcolor=GRID, bordercolor=EDGE, font=dict(color=AX, size=9)),
         ))
         figs_r2.append(fig5)
 
