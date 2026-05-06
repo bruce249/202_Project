@@ -428,7 +428,7 @@ with tab_analysis:
             fig1.add_trace(go.Scatter(
                 x=np.concatenate([[0], I_n[overlap_mask], [0]]),
                 y=np.concatenate([[T_rc[overlap_mask][0]], T_rc[overlap_mask], [T_rc[overlap_mask][-1]]]),
-                fill="toself", fillcolor=f"{C['green']}18",
+                fill="toself", fillcolor="rgba(63,185,80,0.09)",
                 line=dict(width=0), showlegend=False, hoverinfo="skip",
             ))
         fig1.add_trace(go.Scatter(
@@ -477,7 +477,7 @@ with tab_analysis:
             fig2.add_trace(go.Scatter(
                 x=np.concatenate([t1_w, t9_w[::-1]]),
                 y=np.concatenate([T_w,  T_w[::-1]]),
-                fill="toself", fillcolor=f"{C['blue']}14",
+                fill="toself", fillcolor="rgba(88,166,255,0.08)",
                 line=dict(width=0), showlegend=False, hoverinfo="skip",
             ))
         for frac in chosen_fracs:
@@ -698,7 +698,7 @@ with tab_compare:
                     fig_ttt.add_trace(go.Scatter(
                         x=np.concatenate([t1m[mm][:n_p], t9m[mm9][:n_p][::-1]]),
                         y=np.concatenate([T_m[mm][:n_p], T_m[mm9][:n_p][::-1]]),
-                        fill="toself", fillcolor=f"{col}0d",
+                        fill="toself", fillcolor="rgba(88,166,255,0.05)",
                         line=dict(width=0), showlegend=False, hoverinfo="skip",
                     ))
 
