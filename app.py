@@ -1348,7 +1348,7 @@ Answer questions about the physics, ML models, code, materials science, or how t
 
 _AI_URL   = "https://api.openai.com/v1/chat/completions"
 _AI_MODEL = "gpt-4o-mini"          # ← change model here  (gpt-4o-mini, gpt-4o, gpt-3.5-turbo)
-_AI_KEY   = "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"  # ← paste OpenAI API key here
+_AI_KEY   = "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"
 
 def _call_grok(messages: list) -> str:
     import requests as _req
