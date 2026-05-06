@@ -409,13 +409,11 @@ tab_analysis, tab_compare, tab_database, tab_method = st.tabs(
 with tab_analysis:
 
     with st.expander("⚙️  Panel visibility", expanded=False):
-        cp = st.columns(6)
+        cp = st.columns(4)
         show_rate = cp[0].checkbox("Rate Competition",  True)
         show_ttt  = cp[1].checkbox("TTT Diagram",       True)
         show_ml   = cp[2].checkbox("Physics vs ML",     True)
         show_nsen = cp[3].checkbox("Avrami n Sweep",    True)
-        show_all  = cp[4].checkbox("All Materials",     True)
-        show_gen  = cp[5].checkbox("ML Generalisation", True)
 
     # ── ROW 1 ────────────────────────────────────────────────────────────
     figs_r1 = []
@@ -584,72 +582,6 @@ with tab_analysis:
             height=430,
         ))
         figs_r2.append(fig4)
-
-    if show_all:
-        fig5 = go.Figure()
-        for mi, m in enumerate(TRAIN_MATERIALS):
-            pp  = MATERIALS[m]
-            col = PAL[mi % len(PAL)]
-            T_m, res_m, Tn_m, tt_m = ttt_curve(pp, n_avrami=n_avrami)
-            t1m = res_m[0.01]; mm = np.isfinite(t1m) & (t1m > 0) & (t1m < 1e23)
-            hl  = (m == mat_name)
-            if mm.any():
-                fig5.add_trace(go.Scatter(
-                    x=t1m[mm], y=T_m[mm], mode="lines", name=m,
-                    line=dict(color=col, width=3.5 if hl else 1.3),
-                    opacity=1.0 if hl else 0.6,
-                    hovertemplate=f"<b>{m}</b><br>t=%{{x:.3e}} s<br>T=%{{y:.0f}}°C<extra></extra>",
-                ))
-            fig5.add_trace(go.Scatter(
-                x=[tt_m], y=[Tn_m], mode="markers", showlegend=False,
-                marker=dict(color=col, size=10 if hl else 5,
-                            line=dict(color="white", width=1.5) if hl else dict()),
-                hovertemplate=f"<b>{m}</b> nose<br>{Tn_m:.0f}°C · {tt_m:.2e} s<extra></extra>",
-            ))
-        fig5.update_xaxes(type="log")
-        fig5.update_layout(**base_layout(
-            title="All 30 Training Materials — TTT (1% start)",
-            xaxis_title="Time (s)",
-            yaxis_title="Temperature (°C)",
-            height=430,
-            legend=dict(bgcolor=GRID, bordercolor=EDGE, font=dict(color=AX, size=9)),
-        ))
-        figs_r2.append(fig5)
-
-    if show_gen:
-        fig6 = go.Figure()
-        # Bar chart
-        fig6.add_trace(go.Bar(
-            x=TEST_MATERIALS, y=true_nT, name="Physics (true)",
-            marker=dict(color=C["blue"], opacity=0.85, line=dict(color="white", width=0.6)),
-            width=0.35, offset=-0.19,
-            hovertemplate="<b>%{x}</b><br>Physics T_nose = %{y:.0f}°C<extra></extra>",
-        ))
-        fig6.add_trace(go.Bar(
-            x=TEST_MATERIALS, y=pred_nT, name="ML predicted",
-            marker=dict(color=C["red"], opacity=0.85, line=dict(color="white", width=0.6)),
-            width=0.35, offset=0.19,
-            hovertemplate="<b>%{x}</b><br>ML T_nose = %{y:.0f}°C<extra></extra>",
-        ))
-        # Error lines
-        for i, m in enumerate(TEST_MATERIALS):
-            fig6.add_shape(type="line",
-                x0=i, x1=i, y0=true_nT[i], y1=pred_nT[i],
-                line=dict(color=C["yellow"], width=1.5, dash="dot"),
-            )
-        fig6.add_annotation(**annot(
-            f"R²  T_nose  = <b>{r2_T:.4f}</b><br>"
-            f"R²  log t   = <b>{r2_t:.4f}</b><br>"
-            f"Mean |ΔT|  = <b>{np.mean(np.abs(np.array(true_nT)-np.array(pred_nT))):.1f}°C</b>",
-        ))
-        fig6.update_layout(**base_layout(
-            title=f"ML Generalisation — {len(TEST_MATERIALS)} Unseen Test Materials",
-            xaxis_title="Material",
-            yaxis_title="Nose Temperature (°C)",
-            barmode="overlay",
-            height=430,
-        ))
-        figs_r2.append(fig6)
 
     if figs_r2:
         for col, fig in zip(st.columns(len(figs_r2)), figs_r2):
