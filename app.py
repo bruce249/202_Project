@@ -145,7 +145,8 @@ def base_layout(**kw):
         margin=dict(l=70, r=28, t=58, b=60),
         hoverlabel=dict(bgcolor=PANEL, bordercolor=EDGE, font_color=AX,
                         font_size=13, font_family="Inter, sans-serif"),
-        title_font=dict(size=15, color=AX, family="Inter, sans-serif"),
+        title=dict(text="", font=dict(size=15, color=AX,
+                                      family="Inter, sans-serif")),
     )
     d.update(kw)
     return d
@@ -387,8 +388,8 @@ def build_sim_figure(sim: dict) -> go.Figure:
         active=0,
         currentvalue=dict(prefix="τ = ", suffix="  ×  t₉₅",
                           font=dict(color=AX, size=12)),
-        pad=dict(t=50, b=10),
-        len=0.88, x=0.06,
+        pad=dict(t=55, b=15),
+        len=1.0, x=0.0,
         bgcolor=GRID, bordercolor=EDGE,
         tickcolor=MUTED,
         steps=[dict(
@@ -403,21 +404,30 @@ def build_sim_figure(sim: dict) -> go.Figure:
     )]
 
     fig.update_layout(
-        **base_layout(height=600),
+        **base_layout(height=620),
         updatemenus=[dict(
             type="buttons", showactive=True,
-            direction="left",
-            x=0.0, y=-0.13, xanchor="left", yanchor="top",
-            bgcolor=GRID, bordercolor=EDGE,
-            font=dict(color=AX, size=13),
-            pad=dict(r=8, t=6),
+            direction="right",
+            # Anchored inside plot area — visible in fullscreen
+            x=0.01, y=0.01, xanchor="left", yanchor="bottom",
+            bgcolor="#1c2128", bordercolor=EDGE,
+            font=dict(color=AX, size=12),
+            pad=dict(r=6, t=4, b=4, l=4),
             buttons=[
-                dict(label="▶  Play",
+                dict(label="▶ Play",
                      method="animate",
                      args=[None, anim_opts]),
-                dict(label="⏸  Pause",
+                dict(label="⏸ Pause",
                      method="animate",
                      args=[[None], pause_opts]),
+                dict(label="↺ Restart",
+                     method="animate",
+                     args=[None, dict(
+                         frame=dict(duration=90, redraw=True),
+                         transition=dict(duration=0),
+                         mode="immediate",
+                         fromcurrent=False,
+                     )]),
             ],
         )],
         sliders=sliders,
