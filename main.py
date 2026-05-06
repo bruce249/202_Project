@@ -216,24 +216,31 @@ def fetch_mp_structure_params(api_key: str, elements: list) -> dict:
         "Os": "Osmium",  "Ru": "Ruthenium","Li": "Lithium", "Na":"Sodium",
     }
 
+    errors = {}
     result = {}
-    with MPRester("IaaToOm2MJ2ne6FpjuFjiCoBhVNxkxaX") as mpr:
+    with MPRester(api_key) as mpr:
         for elem in elements:
-            docs = mpr.materials.summary.search(
-                chemsys=elem, is_stable=True,
-                fields=["formula_pretty", "volume", "nsites",
-                        "lattice", "density"]
-            )
-            if not docs:
-                continue
-            # Pick ground-state entry (minimum energy)
-            doc  = docs[0]
-            Vm   = (doc.volume * 1e-30 / doc.nsites) * NA      # m³/mol
-            a    = (doc.volume / doc.nsites) ** (1/3) * 1e-10  # m
-            mat  = name_map.get(elem, elem)
-            result[mat] = {"a": a, "Vm": Vm}
-            print(f"  MP fetched {elem:3s} ({mat}): a={a:.3e} m  Vm={Vm:.3e} m³/mol")
+            try:
+                docs = mpr.materials.summary.search(
+                    elements=[elem],
+                    num_elements=1,
+                    fields=["formula_pretty", "volume", "nsites",
+                            "energy_above_hull"]
+                )
+                if not docs:
+                    errors[elem] = "no docs returned"
+                    continue
+                doc = min(docs, key=lambda d: (d.energy_above_hull or 1e10))
+                Vm  = (doc.volume * 1e-30 / doc.nsites) * NA
+                a   = (doc.volume / doc.nsites) ** (1/3) * 1e-10
+                mat = name_map.get(elem, elem)
+                result[mat] = {"a": a, "Vm": Vm}
+            except Exception as e:
+                errors[elem] = str(e)
 
+    if errors:
+        print(f"  MP fetch errors: {errors}")
+    result["_errors"] = errors  # pass errors back to app for display
     return result
 
 

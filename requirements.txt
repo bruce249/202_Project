@@ -5,3 +5,4 @@ scikit-learn>=1.4.0
 pandas>=2.0.0
 requests>=2.31.0
 matplotlib>=3.7.0
+mp-api>=0.41.0

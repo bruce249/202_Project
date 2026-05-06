@@ -185,6 +185,263 @@ def get_models(n_virtual: int, n_avrami: int):
     return train_models(n_virtual=n_virtual, n_T=250, n_avrami=n_avrami)
 
 
+@st.cache_data(show_spinner=False)
+def run_nucleation_sim(mat_name: str, T_celsius: float,
+                       n_frames: int = 65, grid_size: int = 160):
+    """
+    Pre-compute all animation frames for a 2D nucleation+growth simulation.
+    Time axis is normalised: tau = t / t95  (0 → 1 = 95% transformed).
+    """
+    p   = MATERIALS[mat_name]
+    T   = T_celsius + 273.15
+
+    I_val = float(nucleation_rate(np.array([T]), p)[0])
+    U_val = float(growth_rate(np.array([T]), p)[0])
+    k_val = float(jmak_k(np.array([T]), p, 4)[0])
+
+    if I_val <= 0 or U_val <= 0 or not np.isfinite(k_val) or k_val <= 0:
+        return None
+
+    # t95 = time to 95% transformed (JMAK: f=0.95)
+    t95 = float((np.log(1.0 / 0.05) / k_val) ** 0.25)
+    t95 = float(np.clip(t95, 1e-30, 1e30))
+
+    # Box big enough that all grains fit by t95 × 1.15
+    t_sim  = t95 * 1.15
+    L      = U_val * t95 * 6.0       # physical width (m)
+    cell_sz = L / grid_size
+    thick  = 1e-6                    # thin-film thickness (m)
+
+    # Enforce a dense microstructure: minimum 35 nuclei
+    exp_n = I_val * thick * L**2 * t95
+    exp_n = float(np.clip(exp_n, 35, 300))
+
+    rng    = np.random.RandomState(42)
+    n_nuc  = int(rng.poisson(exp_n))
+    n_nuc  = max(35, min(n_nuc, 300))
+
+    # Nucleation sites (grid pixel coords) and birth times
+    nx_arr = rng.uniform(0, grid_size, n_nuc)
+    ny_arr = rng.uniform(0, grid_size, n_nuc)
+    nt_arr = rng.uniform(0, t95 * 0.80, n_nuc)
+
+    # Voronoi-like per-pixel: earliest arrival time & winning grain
+    ii = np.arange(grid_size, dtype=np.float32)[:, None]
+    jj = np.arange(grid_size, dtype=np.float32)[None, :]
+    t_xform  = np.full((grid_size, grid_size), np.inf, dtype=np.float32)
+    grain_id = np.zeros((grid_size, grid_size), dtype=np.int32)
+
+    for k in range(n_nuc):
+        dist_cells = np.sqrt((ii - nx_arr[k])**2 + (jj - ny_arr[k])**2)
+        t_k = float(nt_arr[k]) + dist_cells * cell_sz / U_val
+        better = t_k < t_xform
+        t_xform[better] = t_k[better].astype(np.float32)
+        grain_id[better] = k
+
+    # Grain boundary mask: pixel differs from any neighbour → edge
+    gid = grain_id
+    boundary_v = np.pad((gid[:-1, :] != gid[1:, :]), ((0,1),(0,0)))
+    boundary_h = np.pad((gid[:, :-1] != gid[:, 1:]), ((0,0),(0,1)))
+    grain_boundary = (boundary_v | boundary_h).astype(np.float32)
+
+    # Colour encoding: 0 = untransformed, tiny positive = boundary, else grain colour
+    N_COL = 18
+    grain_col_map = ((grain_id % N_COL) + 2).astype(np.float32) / (N_COL + 2)
+
+    # Normalised time axis tau = t / t95
+    tau_arr = np.linspace(0, t_sim / t95, n_frames)
+    t_arr   = tau_arr * t95
+
+    f_sim    = []
+    z_frames = []
+    for t in t_arr:
+        mask    = t_xform <= t
+        display = np.where(mask,
+                           np.where(grain_boundary.astype(bool), 0.05, grain_col_map),
+                           0.0)
+        z_frames.append(display.tolist())
+        f_sim.append(float(mask.mean()))
+
+    # JMAK theoretical curve in normalised τ-space.
+    # f(τ) = 1 − exp(−ln(20)·τ⁴)  is identical to 1−exp(−k·t⁴) after
+    # substitution t = τ·t95, and is numerically stable regardless of k magnitude.
+    tau_jmak = np.linspace(0, t_sim / t95, 300)
+    f_jmak   = (1.0 - np.exp(-np.log(20.0) * tau_jmak**4)).tolist()
+
+    # Nuclei visible per frame (born before t), in pixel coords
+    nuc_per_frame = [
+        {"x": ny_arr[nt_arr <= t].tolist(),
+         "y": nx_arr[nt_arr <= t].tolist()}
+        for t in t_arr
+    ]
+
+    return dict(
+        z_frames=z_frames,
+        f_sim=f_sim,
+        tau_arr=tau_arr.tolist(),      # normalised: 0..~1.15
+        t_arr=t_arr.tolist(),          # physical seconds (for caption only)
+        tau_jmak=tau_jmak.tolist(),
+        f_jmak=f_jmak,
+        nuc_per_frame=nuc_per_frame,
+        n_nuc=n_nuc,
+        t95=t95,
+        t_sim=t_sim,
+        T_celsius=T_celsius,
+        grid_size=grid_size,
+        I_val=I_val,
+        U_val=U_val,
+    )
+
+
+def build_sim_figure(sim: dict) -> go.Figure:
+    from plotly.subplots import make_subplots
+
+    n_f      = len(sim["z_frames"])
+    tau_arr  = sim["tau_arr"]     # normalised time 0..~1.15
+    tau_jmak = sim["tau_jmak"]
+
+    # 20-colour palette: slot 0 = untransformed, slot 1 = boundary, 2-19 = grains
+    palette = [
+        BG,         # 0 untransformed
+        "#1c2128",  # 1 grain boundary (near-black)
+        C["blue"], C["red"], C["green"], C["yellow"],
+        C["purple"], C["orange"], C["teal"], C["pink"],
+        "#56d364", "#f0883e", "#a5d6ff", "#ffa8a8", "#b3f0c0", "#ffe8a1",
+        "#c9d1d9", "#79c0ff", "#ff7b72", "#e3b341",
+    ]
+    n_pal  = len(palette)
+    cscale = [[i / (n_pal - 1), palette[i]] for i in range(n_pal)]
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        column_widths=[0.57, 0.43],
+        horizontal_spacing=0.06,
+    )
+    # Wipe any auto-annotations make_subplots injects (can render as "undefined")
+    fig.layout.annotations = []
+
+    # ── initial microstructure ─────────────────────────────────────────────
+    fig.add_trace(go.Heatmap(
+        z=sim["z_frames"][0],
+        colorscale=cscale, zmin=0, zmax=1,
+        showscale=False,
+        hovertemplate="row=%{y}  col=%{x}<extra></extra>",
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=sim["nuc_per_frame"][0]["x"],
+        y=sim["nuc_per_frame"][0]["y"],
+        mode="markers",
+        marker=dict(color=C["yellow"], size=7, symbol="circle-open",
+                    line=dict(color=C["yellow"], width=1.5)),
+        name="Nuclei", showlegend=False,
+        hovertemplate="nucleus<extra></extra>",
+    ), row=1, col=1)
+
+    # ── kinetics panel ─────────────────────────────────────────────────────
+    fig.add_trace(go.Scatter(
+        x=tau_jmak, y=sim["f_jmak"],
+        mode="lines", name="JMAK theory",
+        line=dict(color=C["blue"], width=2.5, dash="dash"),
+        hovertemplate="τ=%{x:.3f}<br>f=%{y:.3f}<extra></extra>",
+    ), row=1, col=2)
+
+    fig.add_trace(go.Scatter(
+        x=[tau_arr[0]], y=[sim["f_sim"][0]],
+        mode="lines+markers", name="Simulation",
+        line=dict(color=C["green"], width=2.5),
+        marker=dict(color=C["green"], size=5),
+        hovertemplate="τ=%{x:.3f}<br>f=%{y:.3f}<extra></extra>",
+    ), row=1, col=2)
+
+    # ── animation frames ───────────────────────────────────────────────────
+    frames = []
+    for i in range(n_f):
+        frames.append(go.Frame(
+            data=[
+                go.Heatmap(z=sim["z_frames"][i]),
+                go.Scatter(x=sim["nuc_per_frame"][i]["x"],
+                           y=sim["nuc_per_frame"][i]["y"]),
+                go.Scatter(x=tau_jmak, y=sim["f_jmak"]),
+                go.Scatter(x=tau_arr[:i+1], y=sim["f_sim"][:i+1]),
+            ],
+            traces=[0, 1, 2, 3],
+            name=str(i),
+        ))
+    fig.frames = frames
+
+    # ── slider ─────────────────────────────────────────────────────────────
+    sliders = [dict(
+        active=0,
+        currentvalue=dict(prefix="τ = ", suffix="  ×  t₉₅",
+                          font=dict(color=AX, size=12)),
+        pad=dict(t=45, b=5),
+        bgcolor=GRID, bordercolor=EDGE,
+        tickcolor=MUTED,
+        steps=[dict(
+            method="animate",
+            args=[[str(i)], dict(mode="immediate",
+                                 frame=dict(duration=0),
+                                 transition=dict(duration=0))],
+            label=f"{tau_arr[i]:.2f}",
+        ) for i in range(n_f)],
+    )]
+
+    fig.update_layout(
+        **base_layout(height=600),
+        updatemenus=[dict(
+            type="buttons", showactive=False,
+            x=0.0, y=-0.14, xanchor="left",
+            bgcolor=GRID, bordercolor=EDGE,
+            font=dict(color=AX),
+            buttons=[
+                dict(label="▶  Play",
+                     method="animate",
+                     args=[None, dict(frame=dict(duration=70, redraw=True),
+                                      fromcurrent=True, mode="immediate")]),
+                dict(label="⏸  Pause",
+                     method="animate",
+                     args=[[None], dict(frame=dict(duration=0),
+                                        mode="immediate")]),
+            ],
+        )],
+        sliders=sliders,
+    )
+
+    fig.update_xaxes(showticklabels=False, showgrid=False,
+                     zeroline=False, row=1, col=1)
+    fig.update_yaxes(showticklabels=False, showgrid=False,
+                     zeroline=False, row=1, col=1)
+    fig.update_xaxes(
+        title_text="τ = t / t₉₅",
+        range=[0, max(tau_jmak) * 1.02],
+        tickfont=dict(color=AX), title_font=dict(color=AX, size=13),
+        gridcolor=GRID, row=1, col=2,
+    )
+    fig.update_yaxes(
+        title_text="Fraction transformed  f(t)",
+        range=[0, 1.05],
+        tickfont=dict(color=AX), title_font=dict(color=AX, size=13),
+        gridcolor=GRID, row=1, col=2,
+    )
+
+    # Manual panel titles (avoids "undefined" annotation bug)
+    fig.add_annotation(
+        text=f"Microstructure  —  {sim['T_celsius']:.0f} °C",
+        xref="paper", yref="paper", x=0.26, y=1.04,
+        showarrow=False, font=dict(color=AX, size=14),
+        xanchor="center",
+    )
+    fig.add_annotation(
+        text="Transformation Kinetics  f(τ)",
+        xref="paper", yref="paper", x=0.80, y=1.04,
+        showarrow=False, font=dict(color=AX, size=14),
+        xanchor="center",
+    )
+
+    return fig
+
+
 def ttt_masks(ttt_res):
     out = {}
     for X in (0.01, 0.50, 0.99):
@@ -294,6 +551,7 @@ with st.sidebar:
     )
 
     st.divider()
+
     st.caption(
         f"Database: {len(MATERIALS)} materials  "
         f"({len(TRAIN_MATERIALS)} train · {len(TEST_MATERIALS)} test)"
@@ -401,8 +659,8 @@ st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────
-tab_analysis, tab_compare, tab_database, tab_method = st.tabs(
-    ["📊  Analysis", "⚖️  Compare", "🗂️  Database", "📐  Methodology"]
+tab_analysis, tab_compare, tab_database, tab_method, tab_sim = st.tabs(
+    ["📊  Analysis", "⚖️  Compare", "🗂️  Database", "📐  Methodology", "🎬  Simulation"]
 )
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -459,7 +717,7 @@ with tab_analysis:
             title=f"{mat_name} — Rate Competition (CNT + Wilson-Frenkel)",
             xaxis_title="Temperature (°C)",
             yaxis_title="Normalized Rate",
-            height=430,
+            height=500,
         ))
         figs_r1.append(fig1)
 
@@ -505,7 +763,7 @@ with tab_analysis:
             title=f"{mat_name} — TTT Diagram (JMAK, n={n_avrami})",
             xaxis_title="Time (s)",
             yaxis_title="Temperature (°C)",
-            height=430,
+            height=500,
         ))
         figs_r1.append(fig2)
 
@@ -549,13 +807,13 @@ with tab_analysis:
             title=f"{mat_name} — Physics vs ML  (1% transformation start)",
             xaxis_title="Time (s)",
             yaxis_title="Temperature (°C)",
-            height=430,
+            height=500,
         ))
         figs_r1.append(fig3)
 
     if figs_r1:
-        for col, fig in zip(st.columns(len(figs_r1)), figs_r1):
-            col.plotly_chart(fig, use_container_width=True)
+        for fig in figs_r1:
+            st.plotly_chart(fig, use_container_width=True)
 
     # ── ROW 2 ────────────────────────────────────────────────────────────
     figs_r2 = []
@@ -581,13 +839,13 @@ with tab_analysis:
             title=f"{mat_name} — Avrami n Sensitivity (1% start)",
             xaxis_title="Time (s)",
             yaxis_title="Temperature (°C)",
-            height=430,
+            height=500,
         ))
         figs_r2.append(fig4)
 
     if figs_r2:
-        for col, fig in zip(st.columns(len(figs_r2)), figs_r2):
-            col.plotly_chart(fig, use_container_width=True)
+        for fig in figs_r2:
+            st.plotly_chart(fig, use_container_width=True)
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -885,6 +1143,162 @@ with tab_method:
     • Kelton & Greer, <i>Nucleation in Condensed Matter</i> (Pergamon, 2010)<br>
     • Turnbull & Fisher, J. Chem. Phys. <b>17</b>, 71 (1949)<br>
     • Iida & Guthrie, <i>Physical Properties of Liquid Metals</i> (1988)
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ═════════════════════════════════════════════════════════════════════════
+# TAB 5 — SIMULATION
+# ═════════════════════════════════════════════════════════════════════════
+with tab_sim:
+    st.markdown("### Live Nucleation & Growth Simulation")
+    st.caption(
+        "2D microstructure evolving in real time — each colour is a distinct grain. "
+        "Yellow dots = nucleation events. Right panel tracks f(t) vs JMAK theory."
+    )
+
+    sim_c1, sim_c2 = st.columns([1, 2])
+
+    with sim_c1:
+        T_lo = int(0.43 * p_main["Tm"] - 273)
+        T_hi = int(0.96 * p_main["Tm"] - 273)
+        T_lo, T_hi = min(T_lo, T_hi-10), max(T_lo+10, T_hi)
+        T_default  = int(np.clip(Tn_tr, T_lo, T_hi))
+
+        T_sim_C = st.slider(
+            "Temperature (°C)", T_lo, T_hi, T_default,
+            help="Move away from nose → fewer nuclei (coarse grains) or slower growth",
+        )
+
+        sim_res = st.select_slider(
+            "Resolution / speed",
+            options=["Fast (120×120)", "Medium (160×160)", "Fine (200×200)"],
+            value="Medium (160×160)",
+        )
+        gs_map = {"Fast (120×120)": 120, "Medium (160×160)": 160, "Fine (200×200)": 200}
+        grid_sz = gs_map[sim_res]
+
+        run_btn = st.button("▶  Run Simulation", use_container_width=True,
+                            type="primary")
+
+        # Info card
+        T_k = T_sim_C + 273.15
+        I_disp = nucleation_rate(np.array([T_k]), p_main)[0]
+        U_disp = growth_rate(np.array([T_k]),     p_main)[0]
+        st.markdown(f"""
+<div style="background:{GRID};border:1px solid {EDGE};border-radius:8px;
+            padding:12px 14px;margin-top:12px;font-size:12px;">
+  <div style="color:{MUTED};margin-bottom:6px;text-transform:uppercase;
+              letter-spacing:.06em;">At {T_sim_C}°C</div>
+  <div style="color:{AX};">I(T) = <b style="color:{C['blue']};">{I_disp:.2e}</b> m⁻³s⁻¹</div>
+  <div style="color:{AX};margin-top:4px;">U(T) = <b style="color:{C['red']};">{U_disp:.2e}</b> m/s</div>
+  <div style="color:{AX};margin-top:4px;">
+    Regime: <b style="color:{C['yellow']};">
+    {"Nucleation dominated" if I_disp > U_disp * 1e9 else
+     "Growth dominated"    if U_disp * 1e9 > I_disp * 10 else
+     "Mixed"}
+    </b>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    with sim_c2:
+        if run_btn or st.session_state.get("sim_done"):
+            st.session_state["sim_done"] = True
+            with st.spinner("Computing simulation frames…"):
+                sim_data = run_nucleation_sim(
+                    mat_name, float(T_sim_C), n_frames=65, grid_size=grid_sz
+                )
+            if sim_data is None:
+                st.warning("No transformation at this temperature — try closer to the nose.")
+            else:
+                fig_sim = build_sim_figure(sim_data)
+                st.plotly_chart(fig_sim, use_container_width=True)
+                st.caption(
+                    f"{sim_data['n_nuc']} nuclei spawned  ·  "
+                    f"simulation duration {sim_data['t_sim']:.3e} s  ·  "
+                    f"grid {grid_sz}×{grid_sz}"
+                )
+                # Grain structure legend
+                st.markdown(f"""
+<div style="background:{PANEL};border:1px solid {EDGE};border-radius:10px;
+            padding:14px 18px;margin-top:4px;display:flex;flex-wrap:wrap;gap:18px;
+            align-items:flex-start;">
+  <div style="color:{MUTED};font-size:11px;text-transform:uppercase;
+              letter-spacing:.07em;width:100%;margin-bottom:2px;">
+    Reading the microstructure
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:28px;height:28px;border-radius:4px;
+                background:linear-gradient(135deg,{C['blue']},{C['green']},{C['orange']});
+                opacity:0.85;"></div>
+    <div>
+      <div style="color:{AX};font-size:13px;font-weight:600;">Coloured regions</div>
+      <div style="color:{MUTED};font-size:11px;">Individual crystal grains — each colour is one grain.<br>
+        Different orientations, same phase.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:28px;height:28px;border-radius:4px;
+                background:#1c2128;border:1px solid {EDGE};"></div>
+    <div>
+      <div style="color:{AX};font-size:13px;font-weight:600;">Black lines</div>
+      <div style="color:{MUTED};font-size:11px;">Grain boundaries — misorientation interface<br>
+        between adjacent grains.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:28px;height:28px;border-radius:50%;
+                border:2px solid {C['yellow']};background:transparent;
+                display:flex;align-items:center;justify-content:center;">
+      <div style="width:6px;height:6px;border-radius:50%;
+                  background:{C['yellow']};"></div>
+    </div>
+    <div>
+      <div style="color:{AX};font-size:13px;font-weight:600;">Yellow circles</div>
+      <div style="color:{MUTED};font-size:11px;">Nucleation sites — where new grains<br>
+        first appear (Poisson process).</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:28px;height:28px;border-radius:4px;
+                background:{BG};border:1px solid {EDGE};"></div>
+    <div>
+      <div style="color:{AX};font-size:13px;font-weight:600;">Dark background</div>
+      <div style="color:{MUTED};font-size:11px;">Untransformed parent phase — will be<br>
+        consumed as grains grow outward.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:28px;height:28px;border-radius:4px;
+                background:linear-gradient(to right,{C['green']},{C['blue']});
+                opacity:0.7;"></div>
+    <div>
+      <div style="color:{AX};font-size:13px;font-weight:600;">Kinetics chart</div>
+      <div style="color:{MUTED};font-size:11px;"><span style="color:{C['green']}">Green</span> = pixel-count f(τ) from sim.
+        <span style="color:{C['blue']}">Blue dashed</span> = JMAK analytical.<br>
+        τ = 1 → 95% transformed (t₉₅).</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+<div style="background:{PANEL};border:1px dashed {EDGE};border-radius:12px;
+            height:420px;display:flex;align-items:center;justify-content:center;">
+  <div style="text-align:center;color:{MUTED};">
+    <div style="font-size:48px;margin-bottom:12px;">🔬</div>
+    <div style="font-size:16px;font-weight:600;color:{AX};">
+      Set temperature and click ▶ Run Simulation
+    </div>
+    <div style="font-size:13px;margin-top:8px;">
+      Watch grains nucleate and grow in real time
+    </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
