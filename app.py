@@ -133,23 +133,25 @@ st.markdown(f"""
 def base_layout(**kw):
     d = dict(
         paper_bgcolor=BG, plot_bgcolor=PANEL,
-        font=dict(color=AX, size=12, family="Inter, sans-serif"),
+        font=dict(color=AX, size=13, family="Inter, sans-serif"),
         xaxis=dict(gridcolor=GRID, zerolinecolor=GRID, linecolor=EDGE,
-                   tickfont=dict(color=AX), title_font=dict(color=AX, size=13)),
+                   tickfont=dict(color=AX, size=12),
+                   title_font=dict(color=AX, size=14), title_standoff=14),
         yaxis=dict(gridcolor=GRID, zerolinecolor=GRID, linecolor=EDGE,
-                   tickfont=dict(color=AX), title_font=dict(color=AX, size=13)),
+                   tickfont=dict(color=AX, size=12),
+                   title_font=dict(color=AX, size=14), title_standoff=14),
         legend=dict(bgcolor=GRID, bordercolor=EDGE, borderwidth=1,
-                    font=dict(color=AX, size=10)),
-        margin=dict(l=60, r=24, t=52, b=52),
+                    font=dict(color=AX, size=12)),
+        margin=dict(l=70, r=28, t=58, b=60),
         hoverlabel=dict(bgcolor=PANEL, bordercolor=EDGE, font_color=AX,
-                        font_family="Inter, sans-serif"),
-        title_font=dict(size=14, color=AX, family="Inter, sans-serif"),
+                        font_size=13, font_family="Inter, sans-serif"),
+        title_font=dict(size=15, color=AX, family="Inter, sans-serif"),
     )
     d.update(kw)
     return d
 
 
-def annot(text, x=0.02, y=0.97, color=None, size=11):
+def annot(text, x=0.02, y=0.97, color=None, size=12):
     return dict(
         text=text, xref="paper", yref="paper", x=x, y=y,
         showarrow=False, align="left",
@@ -420,43 +422,43 @@ with tab_analysis:
 
     if show_rate:
         fig1 = go.Figure()
-        # Fill region where both I and U are above 50% — competition zone
+        # Shaded competition zone (both I and U > 50%)
         overlap_mask = (I_n > 0.5) & (U_n > 0.5)
         if overlap_mask.any():
+            T_ov = T_rc[overlap_mask]
             fig1.add_trace(go.Scatter(
-                x=np.concatenate([[0], I_n[overlap_mask], [0]]),
-                y=np.concatenate([[T_rc[overlap_mask][0]], T_rc[overlap_mask], [T_rc[overlap_mask][-1]]]),
+                x=np.concatenate([T_ov, T_ov[::-1]]),
+                y=np.concatenate([I_n[overlap_mask], U_n[overlap_mask][::-1]]),
                 fill="toself", fillcolor="rgba(63,185,80,0.09)",
                 line=dict(width=0), showlegend=False, hoverinfo="skip",
             ))
         fig1.add_trace(go.Scatter(
-            x=I_n, y=T_rc, mode="lines", name="Nucleation  I(T)",
+            x=T_rc, y=I_n, mode="lines", name="Nucleation  I(T)",
             line=dict(color=C["blue"], width=2.8),
-            hovertemplate="<b>Nucleation</b><br>Rate=%{x:.3f}<br>T=%{y:.0f}°C<extra></extra>",
+            hovertemplate="<b>Nucleation</b><br>T=%{x:.0f}°C<br>Rate=%{y:.3f}<extra></extra>",
         ))
         fig1.add_trace(go.Scatter(
-            x=U_n, y=T_rc, mode="lines", name="Growth  U(T)",
+            x=T_rc, y=U_n, mode="lines", name="Growth  U(T)",
             line=dict(color=C["red"], width=2.8, dash="dash"),
-            hovertemplate="<b>Growth</b><br>Rate=%{x:.3f}<br>T=%{y:.0f}°C<extra></extra>",
+            hovertemplate="<b>Growth</b><br>T=%{x:.0f}°C<br>Rate=%{y:.3f}<extra></extra>",
         ))
         fig1.add_trace(go.Scatter(
-            x=ov, y=T_rc, mode="lines", name="Overall  ∝ I¼U¾",
+            x=T_rc, y=ov, mode="lines", name="Overall  ∝ I¼U¾",
             line=dict(color=C["green"], width=2.8, dash="dashdot"),
-            hovertemplate="<b>Overall</b><br>Rate=%{x:.3f}<br>T=%{y:.0f}°C<extra></extra>",
+            hovertemplate="<b>Overall</b><br>T=%{x:.0f}°C<br>Rate=%{y:.3f}<extra></extra>",
         ))
-        fig1.add_hline(y=T_Ipeak, line=dict(color=C["blue"],  dash="dot", width=1.2), opacity=0.5)
-        fig1.add_hline(y=T_Upeak, line=dict(color=C["red"],   dash="dot", width=1.2), opacity=0.5)
-        fig1.update_yaxes(autorange="reversed")
+        fig1.add_vline(x=T_Ipeak, line=dict(color=C["blue"], dash="dot", width=1.2), opacity=0.5)
+        fig1.add_vline(x=T_Upeak, line=dict(color=C["red"],  dash="dot", width=1.2), opacity=0.5)
         fig1.add_annotation(**annot(
             f"I peak : <b>{T_Ipeak:.0f}°C</b><br>"
             f"U peak : <b>{T_Upeak:.0f}°C</b><br>"
             f"ΔT  :  <b>{abs(T_Ipeak-T_Upeak):.0f}°C</b>",
-            x=0.97, y=0.05,
+            x=0.97, y=0.97,
         ))
         fig1.update_layout(**base_layout(
             title=f"{mat_name} — Rate Competition (CNT + Wilson-Frenkel)",
-            xaxis_title="Normalized Rate",
-            yaxis_title="Temperature (°C)",
+            xaxis_title="Temperature (°C)",
+            yaxis_title="Normalized Rate",
             height=430,
         ))
         figs_r1.append(fig1)
