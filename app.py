@@ -213,18 +213,18 @@ def run_nucleation_sim(mat_name: str, T_celsius: float,
     cell_sz = L / grid_size
     thick  = 1e-6                    # thin-film thickness (m)
 
-    # Enforce a dense microstructure: minimum 35 nuclei
+    # Let physics set nuclei count — high T → few large grains, low T → many small
     exp_n = I_val * thick * L**2 * t95
-    exp_n = float(np.clip(exp_n, 30, 120))
+    exp_n = float(np.clip(exp_n, 2, 200))
 
     rng    = np.random.RandomState(42)
-    n_nuc  = int(rng.poisson(exp_n))
-    n_nuc  = max(30, min(n_nuc, 120))
+    n_nuc  = int(rng.poisson(max(exp_n, 2)))
+    n_nuc  = max(2, min(n_nuc, 200))
 
-    # Nucleation sites (grid pixel coords) and birth times
+    # Spread birth times: early nuclei grow larger, late ones fill gaps
     nx_arr = rng.uniform(0, grid_size, n_nuc)
     ny_arr = rng.uniform(0, grid_size, n_nuc)
-    nt_arr = rng.uniform(0, t95 * 0.80, n_nuc)
+    nt_arr = rng.uniform(0, t95 * 0.75, n_nuc)
 
     # Voronoi-like per-pixel: earliest arrival time & winning grain
     ii = np.arange(grid_size, dtype=np.float32)[:, None]
